@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matriz Esforço × Valor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ── TOKENS ──────────────────────────────────────────────── */
+:root {
+  --bg:          #0f1117;
+  --surface:     #1a1d27;
+  --surface2:    #22263a;
+  --surface3:    #2a2f47;
+  --border:      #303656;
+  --accent:      #6c63ff;
+  --accent2:     #00e5c0;
+  --text:        #e8eaf6;
+  --text-muted:  #7b82a8;
+  --danger:      #ff4d6d;
+
+  --q-win-bg:     rgba(0,229,192,.12);
+  --q-win-border: #00e5c0;
+  --q-strat-bg:   rgba(108,99,255,.12);
+  --q-strat-border:#6c63ff;
+  --q-low-bg:     rgba(255,193,7,.10);
+  --q-low-border: #ffc107;
+  --q-disc-bg:    rgba(255,77,109,.12);
+  --q-disc-border:#ff4d6d;
+
+  --font-ui: 'Segoe UI', system-ui, sans-serif;
+}
+[data-theme="light"] {
+  --bg:         #f0f2f9;
+  --surface:    #ffffff;
+  --surface2:   #f5f6fc;
+  --surface3:   #eceef8;
+  --border:     #d0d5ee;
+  --text:       #1a1d27;
+  --text-muted: #6b7280;
+}
+
+/* ── RESET ───────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+
+/* ── TOP BAR ─────────────────────────────────────────────── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.topbar-logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .03em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.topbar-logo span {
+  color: var(--accent);
+}
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-icon {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: .2s;
+}
+.btn-icon:hover { color: var(--text); background: var(--surface3); }
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────── */
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: calc(100vh - 56px);
+}
+
+/* ── SIDEBAR ─────────────────────────────────────────────── */
+.sidebar {
+  width: 380px;
+  min-width: 340px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 14px 4px;
+  border-bottom: 2px solid transparent;
+  transition: .2s;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.sidebar-tab:hover:not(.active) { color: var(--text); }
+
+.sidebar-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.sidebar-body::-webkit-scrollbar { width: 5px; }
+.sidebar-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+.tab-panel { display: none; flex-direction: column; gap: 20px; }
+.tab-panel.active { display: flex; }
+
+/* ── FORM ────────────────────────────────────────────────── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+.form-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.field input[type="text"],
+.field select,
+.field textarea {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  padding: 9px 11px;
+  font-size: 13px;
+  transition: border-color .2s;
+  outline: none;
+}
+.field input[type="text"]:focus,
+.field select:focus,
+.field textarea:focus { border-color: var(--accent); }
+.field select option { background: var(--surface2); }
+.field textarea { resize: vertical; min-height: 60px; }
+
+.range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.range-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+  height: 4px;
+}
+.range-val {
+  min-width: 28px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 4px;
+}
+
+/* priority pill preview */
+.pill-preview {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.pill-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--accent);
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: .2s;
+  letter-spacing: .02em;
+}
+.btn-primary:hover { filter: brightness(1.12); }
+.btn-primary.edit-mode { background: #ffc107; color: #1a1d27; }
+
+/* ── SEARCH BAR ──────────────────────────────────────────── */
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 11px;
+}
+.search-bar input {
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-size: 13px;
+  flex: 1;
+}
+.search-bar span { color: var(--text-muted); font-size: 14px; }
+
+/* ── FILTER CHIPS ────────────────────────────────────────── */
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: .2s;
+}
+.chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.chip:hover:not(.active) { color: var(--text); border-color: var(--text-muted); }
+
+/* ── QUADRANT CARDS ──────────────────────────────────────── */
+.quad-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.quad-card {
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: .2s;
+}
+.quad-card:hover { transform: translateY(-1px); }
+.quad-card.active { border-color: var(--text) !important; }
+.quad-card .qc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; opacity: .7; }
+.quad-card .qc-count { font-size: 28px; font-weight: 800; line-height: 1.1; margin-top: 4px; }
+.quad-card .qc-sub { font-size: 10px; margin-top: 2px; opacity: .6; }
+
+.qc-win   { background: var(--q-win-bg);   border-color: var(--q-win-border);   color: #00e5c0; }
+.qc-strat { background: var(--q-strat-bg); border-color: var(--q-strat-border); color: #6c63ff; }
+.qc-low   { background: var(--q-low-bg);   border-color: var(--q-low-border);   color: #ffc107; }
+.qc-disc  { background: var(--q-disc-bg);  border-color: var(--q-disc-border);  color: #ff4d6d; }
+
+/* ── PROJECT LIST ────────────────────────────────────────── */
+.proj-list { display: flex; flex-direction: column; gap: 6px; }
+.proj-item {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  transition: .2s;
+  animation: fadeSlide .3s ease;
+}
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.proj-item:hover { border-color: var(--accent); }
+.proj-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 3px;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.08);
+}
+.proj-body { flex: 1; min-width: 0; }
+.proj-name { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.proj-tags { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+.tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.tag-win   { background: rgba(0,229,192,.15);  color: #00e5c0; }
+.tag-strat { background: rgba(108,99,255,.15); color: #8b83ff; }
+.tag-low   { background: rgba(255,193,7,.15);  color: #ffc107; }
+.tag-disc  { background: rgba(255,77,109,.15); color: #ff4d6d; }
+
+.proj-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.proj-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  transition: .2s;
+}
+.proj-btn:hover { color: var(--text); background: var(--surface3); }
+.proj-btn.del:hover { color: var(--danger); border-color: var(--danger); }
+.proj-btn.edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* lock banner */
+.lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 13px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.lock-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  transition: .2s;
+  cursor: pointer;
+}
+.lock-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ── RANKING ─────────────────────────────────────────────── */
+.rank-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  font-size: 12px;
+}
+.rank-num {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--surface3);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.rank-num.gold   { background: #ffd700; color: #1a1d27; }
+.rank-num.silver { background: #c0c0c0; color: #1a1d27; }
+.rank-num.bronze { background: #cd7f32; color: #1a1d27; }
+
+/* ── AREA TABLE ──────────────────────────────────────────── */
+.area-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.area-table th {
+  text-align: left;
+  padding: 7px 8px;
+  color: var(--text-muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  border-bottom: 1px solid var(--border);
+}
+.area-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.area-table tr { cursor: pointer; transition: .15s; }
+.area-table tr:hover td { background: var(--surface3); }
+.area-table tr.active td { background: rgba(108,99,255,.12); color: var(--accent); font-weight: 700; }
+.area-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; }
+
+/* ── DASHBOARD CHARTS ────────────────────────────────────── */
+.chart-block {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+.chart-block h4 { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+.chart-block canvas { max-height: 220px; }
+
+/* ── MATRIX SECTION ──────────────────────────────────────── */
+.matrix-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  overflow: auto;
+  background: var(--bg);
+}
+.matrix-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 28px;
+}
+
+.matrix-wrap {
+  position: relative;
+  width: min(580px, calc(100vw - 460px));
+  aspect-ratio: 1;
+}
+
+/* coloured quadrant backgrounds */
+.quad-bgs {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--border);
+}
+.qbg {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  opacity: .9;
+}
+.qbg-win   { background: var(--q-win-bg);   color: var(--q-win-border);   }
+.qbg-strat { background: var(--q-strat-bg); color: var(--q-strat-border); justify-content: flex-start; }
+.qbg-low   { background: var(--q-low-bg);   color: var(--q-low-border);   align-items: flex-end; }
+.qbg-disc  { background: var(--q-disc-bg);  color: var(--q-disc-border);  align-items: flex-end; justify-content: flex-start; }
+
+/* axis lines */
+.axis-x { position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); z-index: 2; }
+.axis-y { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); z-index: 2; }
+
+/* axis labels */
+.axis-lbl {
+  position: absolute;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+}
+.lbl-top    { top: -24px;   left: 50%; transform: translateX(-50%); }
+.lbl-bot    { bottom: -24px; left: 50%; transform: translateX(-50%); }
+.lbl-right  { right: -110px; top: 50%; transform: translateY(-50%); }
+.lbl-left   { left: -100px;  top: 50%; transform: translateY(-50%); }
+
+/* dots layer */
+.dots-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+}
+.dot {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.25);
+  transform: translate(-50%, 50%);
+  cursor: pointer;
+  transition: transform .2s, box-shadow .2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+}
+.dot:hover {
+  transform: translate(-50%, 50%) scale(1.45);
+  z-index: 20;
+  box-shadow: 0 0 0 5px rgba(255,255,255,.1);
+}
+.dot.dimmed { opacity: .15; }
+.dot.highlighted { transform: translate(-50%, 50%) scale(1.3); box-shadow: 0 0 0 4px rgba(255,255,255,.2); z-index: 20; }
+
+/* tooltip */
+.dot-tooltip {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 13px;
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 30;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  opacity: 0;
+  transition: opacity .15s;
+  min-width: 170px;
+}
+.dot:hover .dot-tooltip { visibility: visible; opacity: 1; }
+.dot-tooltip strong { display: block; font-size: 13px; color: var(--accent2); margin-bottom: 5px; }
+.dot-tooltip span { display: flex; align-items: center; gap: 6px; color: var(--text-muted); margin-top: 2px; }
+.dot-tooltip span b { color: var(--text); }
+
+/* matrix legend */
+.matrix-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: .15s;
+}
+.legend-item:hover { border-color: var(--border); color: var(--text); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* ── MODAL ───────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  width: 360px;
+  max-width: 90vw;
+  box-shadow: 0 24px 60px rgba(0,0,0,.5);
+  transform: translateY(10px);
+  transition: transform .2s;
+}
+.modal-overlay.open .modal { transform: translateY(0); }
+.modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+.modal-btns { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: .2s;
+}
+.btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+.btn-danger {
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  transition: .2s;
+}
+.btn-danger:hover { filter: brightness(1.1); }
+
+/* ── TOAST ───────────────────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toast {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  color: var(--text);
+  font-size: 13px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.3);
+  animation: toastIn .25s ease;
+  max-width: 280px;
+}
+.toast.success { border-left-color: var(--accent2); }
+.toast.error   { border-left-color: var(--danger); }
+@keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ── RESPONSIVE ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-body { flex-direction: column; height: auto; overflow: visible; }
+  .sidebar { width: 100%; min-width: unset; border-right: none; border-bottom: 1px solid var(--border); max-height: 60vh; }
+  .matrix-section { padding: 20px 12px 32px; min-height: 80vw; }
+  .matrix-wrap { width: min(90vw, 500px); }
+  .lbl-right, .lbl-left { display: none; }
+}
+
+/* ── MISC ────────────────────────────────────────────────── */
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 28px;
+}
+.empty-state .icon { font-size: 32px; margin-bottom: 8px; }
+
+.export-row { display: flex; gap: 8px; }
+.btn-export {
+  flex: 1;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 9px;
+  border-radius: 8px;
+  transition: .2s;
+}
+.btn-export:hover { color: var(--accent); border-color: var(--accent); }
+
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.stat-box {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 10px;
+  text-align: center;
+}
+.stat-box .sv { font-size: 22px; font-weight: 800; color: var(--accent); }
+.stat-box .sl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+/* scrollbar for dark select */
+select option { background: #1a1d27; }
+</style>
+</head>
+<body data-theme="dark">
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <span>✦</span> Matriz Esforço × Valor
+  </div>
+  <div class="topbar-actions">
+    <span id="syncStatus" style="font-size:11px;color:var(--text-muted);margin-right:6px;">⏳ Conectando…</span>
+    <button class="btn-icon" id="btnRefresh" title="Recarregar dados do SharePoint">🔄</button>
+    <button class="btn-icon" id="btnTheme" title="Alternar tema">🌙</button>
+    <button class="btn-icon" id="btnImport" title="Importar JSON">📂</button>
+    <button class="btn-icon" id="btnExportJSON" title="Exportar JSON (backup)">💾</button>
+    <button class="btn-icon" id="btnPrint" title="Imprimir / Salvar PDF">🖨️</button>
+  </div>
+</div>
+
+<!-- MAIN BODY -->
+<div class="app-body">
+
+  <!-- ═══ SIDEBAR ═══ -->
+  <div class="sidebar">
+    <div class="sidebar-tabs">
+      <button class="sidebar-tab active" data-tab="cadastro">Cadastro</button>
+      <button class="sidebar-tab" data-tab="ranking">Ranking</button>
+      <button class="sidebar-tab" data-tab="dashboard">Dashboard</button>
+    </div>
+
+    <div class="sidebar-body">
+
+      <!-- ── CADASTRO ──────────────────────────────────────── -->
+      <div class="tab-panel active" id="tab-cadastro">
+
+        <div>
+          <div class="section-label" id="form-section-label">Novo Projeto</div>
+          <div class="form-card">
+            <div class="field">
+              <label>Nome do projeto</label>
+              <input type="text" id="fNome" placeholder="Ex: Logbook Digital" autocomplete="off">
+            </div>
+            <div class="field">
+              <label>Área solicitante</label>
+              <select id="fArea"></select>
+            </div>
+            <div class="field">
+              <label>Descrição / Observações (opcional)</label>
+              <textarea id="fDesc" placeholder="Detalhes, contexto, responsável…"></textarea>
+            </div>
+            <div class="field">
+              <label>Prazo estimado (opcional)</label>
+              <input type="date" id="fPrazo" style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:9px 11px;font-size:13px;outline:none;">
+            </div>
+            <div class="field">
+              <label>Esforço / Complexidade <span style="color:var(--text-muted);font-size:11px;">← baixo · alto →</span></label>
+              <div class="range-row">
+                <input type="range" id="fEsforco" min="1" max="10" value="5">
+                <div class="range-val" id="vEsforco">5</div>
+              </div>
+            </div>
+            <div class="field">
+              <label>Valor / Impacto <span style="color:var(--text-muted);font-size:11px;">← baixo · alto →</span></label>
+              <div class="range-row">
+                <input type="range" id="fValor" min="1" max="10" value="5">
+                <div class="range-val" id="vValor">5</div>
+              </div>
+            </div>
+            <div class="pill-preview" id="pillPreview">
+              <div class="pill-dot" id="pillDot"></div>
+              <span id="pillText">Classificação prévia aparece aqui</span>
+            </div>
+            <button class="btn-primary" id="btnSalvar">Plotar na Matriz</button>
+            <button class="btn-ghost" id="btnCancelarEdit" style="display:none;">✖ Cancelar edição</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label">Filtros rápidos</div>
+          <div class="filter-chips" id="areaChips"></div>
+        </div>
+
+        <div>
+          <div class="section-label" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Projetos <span id="projCount" style="color:var(--accent)">0</span></span>
+            <span id="lockLabel" style="font-size:11px;color:var(--text-muted);">🔒 bloqueado</span>
+          </div>
+          <div class="search-bar" style="margin-bottom:10px;">
+            <span>🔍</span>
+            <input type="text" id="searchInput" placeholder="Buscar projeto…">
+          </div>
+          <div class="proj-list" id="projList">
+            <div class="empty-state"><div class="icon">🗂️</div>Nenhum projeto ainda.<br>Cadastre o primeiro acima.</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="lock-banner">
+            <span id="lockBannerText">Exclusão e edição bloqueadas</span>
+            <button class="lock-btn" id="btnLock">Destravar</button>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-label">Exportar</div>
+          <div class="export-row">
+            <button class="btn-export" id="btnExportCSV">⬇ CSV</button>
+            <button class="btn-export" id="btnExportJSON2">⬇ JSON</button>
+            <button class="btn-import-csv btn-export" id="btnImportCSV">⬆ CSV</button>
+          </div>
+        </div>
+
+      </div><!-- /cadastro -->
+
+      <!-- ── RANKING ────────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-ranking">
+
+        <div class="stats-row" id="statsRow"></div>
+
+        <div>
+          <div class="section-label">Por quadrante</div>
+          <div class="quad-grid" id="quadGrid"></div>
+        </div>
+
+        <div>
+          <div class="section-label">Por área</div>
+          <table class="area-table">
+            <thead><tr><th>Área</th><th>Qtd</th><th>Avg V</th><th>Avg E</th></tr></thead>
+            <tbody id="areaTableBody"></tbody>
+          </table>
+        </div>
+
+        <div>
+          <div class="section-label">Top 10 (maior valor, menor esforço)</div>
+          <div id="rankingList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </div>
+
+      </div><!-- /ranking -->
+
+      <!-- ── DASHBOARD ──────────────────────────────────────── -->
+      <div class="tab-panel" id="tab-dashboard">
+
+        <div class="chart-block">
+          <h4>Saúde do portfólio</h4>
+          <canvas id="chartSaude"></canvas>
+        </div>
+
+        <div class="chart-block">
+          <h4>Demanda por área</h4>
+          <canvas id="chartDemanda"></canvas>
+        </div>
+
+        <div class="chart-block">
+          <h4>Média valor × esforço por área</h4>
+          <canvas id="chartVE"></canvas>
+        </div>
+
+      </div><!-- /dashboard -->
+
+    </div><!-- /sidebar-body -->
+  </div><!-- /sidebar -->
+
+  <!-- ═══ MATRIX ═══ -->
+  <div class="matrix-section">
+    <div class="matrix-title">Matriz Esforço × Valor</div>
+    <div class="matrix-wrap" id="matrixWrap">
+      <div class="quad-bgs">
+        <div class="qbg qbg-win">Quick Wins</div>
+        <div class="qbg qbg-strat">Estratégicos</div>
+        <div class="qbg qbg-low">Baixa Prioridade</div>
+        <div class="qbg qbg-disc">Descartar</div>
+      </div>
+      <div class="axis-x"></div>
+      <div class="axis-y"></div>
+      <div class="axis-lbl lbl-top">Alto Valor</div>
+      <div class="axis-lbl lbl-bot">Baixo Valor</div>
+      <div class="axis-lbl lbl-right">Alto Esforço →</div>
+      <div class="axis-lbl lbl-left">← Baixo Esforço</div>
+      <div class="dots-layer" id="dotsLayer"></div>
+    </div>
+    <div class="matrix-legend" id="matrixLegend"></div>
+  </div>
+
+</div><!-- /app-body -->
+
+<!-- TOAST CONTAINER -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- CONFIRM DELETE MODAL -->
+<div class="modal-overlay" id="modalDelete">
+  <div class="modal">
+    <h3>Excluir projeto?</h3>
+    <p id="modalDeleteName" style="font-size:13px;color:var(--text-muted);"></p>
+    <div class="modal-btns">
+      <button class="btn-ghost" id="btnDeleteCancel">Cancelar</button>
+      <button class="btn-danger" id="btnDeleteConfirm">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOCK MODAL -->
+<div class="modal-overlay" id="modalLock">
+  <div class="modal">
+    <h3 id="lockModalTitle">Senha de administrador</h3>
+    <div class="field" style="margin-top:8px;">
+      <label>Senha</label>
+      <input type="password" id="lockPasswordInput" placeholder="Digite a senha…" style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;color:var(--text);padding:9px 11px;font-size:13px;outline:none;width:100%;">
+    </div>
+    <div id="lockError" style="font-size:12px;color:var(--danger);margin-top:8px;display:none;">Senha incorreta.</div>
+    <div class="modal-btns">
+      <button class="btn-ghost" id="btnLockCancel">Cancelar</button>
+      <button class="btn-primary" id="btnLockConfirm">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT JSON MODAL -->
+<input type="file" id="fileInput" accept=".json,.csv" style="display:none;">
+<input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+
+<script>
+/* ══════════════════════════════════════════════════════════
+   CONFIG
+══════════════════════════════════════════════════════════ */
+const ADMIN_PASS = "1234";
+const STORAGE_KEY = "mev3_data";
+
+const AREAS = [
+  { name:"Supply Chain",           color:"#0d6efd" },
+  { name:"GQ",                     color:"#fd7e14" },
+  { name:"Manutenção",             color:"#6f42c1" },
+  { name:"Controladoria",          color:"#e83e8c" },
+  { name:"Validação",              color:"#708090" },
+  { name:"Projetos",               color:"#795548" },
+  { name:"Excelência Operacional", color:"#ffc107" },
+  { name:"CQ",                     color:"#20c997" },
+  { name:"Gráfica",                color:"#dc3545" },
+  { name:"Produção",               color:"#198754" },
+  { name:"EEOHS",                  color:"#00fa9a" },
+  { name:"RH",                     color:"#da70d6" },
+  { name:"TRANSFORMAÇÃO DIGITAL",  color:"#4040ff" },
+  { name:"COMPRAS",                color:"#b8860b" },
+  { name:"PU-CONTROLLING",         color:"#800020" },
+  { name:"PLANT MANAGEMENT",       color:"#555f6e" },
+  { name:"Outra",                  color:"#a0a0a0" },
+];
+
+const AREA_MAP = {};
+AREAS.forEach(a => AREA_MAP[a.name] = a.color);
+
+function areaColor(name) { return AREA_MAP[name] || "#a0a0a0"; }
+
+/* ══════════════════════════════════════════════════════════
+   STATE
+══════════════════════════════════════════════════════════ */
+let projects = [];
+let filterArea = null;
+let filterQuad = null;
+let searchQuery = "";
+let unlocked = false;
+let editingId = null;
+let deleteTargetId = null;
+
+let chartSaude = null, chartDemanda = null, chartVE = null;
+
+/* ══════════════════════════════════════════════════════════
+   SHAREPOINT LIST API — Fresenius
+   Lê e grava na lista "MatrizProjetos" via REST API nativa
+   do SharePoint. Usa autenticação M365 do navegador.
+══════════════════════════════════════════════════════════ */
+const SP_SITE      = "https://fresenius.sharepoint.com/teams/Team-FK-BR-Melhoria_Continua_E_Transformacao_Digital-Facilitadores";
+const SP_LIST      = "MatrizProjetos";
+const SP_API       = `${SP_SITE}/_api/web/lists/getbytitle('${SP_LIST}')/items`;
+const SP_HEADERS   = { "Accept": "application/json;odata=verbose", "Content-Type": "application/json;odata=verbose" };
+
+let spSyncing  = false;
+let lastPollStr = "";
+
+function setSyncStatus(state) {
+  const el = document.getElementById("syncStatus");
+  if (!el) return;
+  const map = {
+    connecting: ["⏳ Conectando…",        "var(--text-muted)"],
+    syncing:    ["⏳ Salvando…",           "var(--text-muted)"],
+    ok:         ["✅ Salvo",               "var(--accent2)"],
+    error:      ["⚠️ Erro — salvo local",  "#ffc107"],
+    offline:    ["📴 Modo offline",        "#ffc107"],
+    loaded:     ["✅ Conectado",           "var(--accent2)"],
+  };
+  const [txt, color] = map[state] || map.ok;
+  el.textContent = txt;
+  el.style.color  = color;
+}
+
+async function getDigest() {
+  try {
+    const r = await fetch(`${SP_SITE}/_api/contextinfo`, {
+      method: "POST", headers: SP_HEADERS, credentials: "include"
+    });
+    const d = await r.json();
+    return d.d.GetContextWebInformation.FormDigestValue;
+  } catch { return null; }
+}
+
+/* Converte item da lista SP → objeto projeto */
+function spItemToProject(item) {
+  return {
+    id:     item.Id,                          // ID numérico do SP (usado para update/delete)
+    spId:   item.Id,
+    nome:   item.Title        || "",
+    area:   item.Area         || "Outra",
+    esforco:parseInt(item.Esforco) || 5,
+    valor:  parseInt(item.Valor)   || 5,
+    desc:   item.Descricao    || "",
+    prazo:  item.Prazo ? item.Prazo.substring(0,10) : "",
+  };
+}
+
+/* Converte objeto projeto → body para API SP */
+function projectToSpBody(p) {
+  return JSON.stringify({
+    __metadata: { type: `SP.Data.${SP_LIST}ListItem` },
+    Title:      p.nome,
+    Area:       p.area,
+    Esforco:    p.esforco,
+    Valor:      p.valor,
+    Descricao:  p.desc  || "",
+    Prazo:      p.prazo ? p.prazo + "T00:00:00Z" : null,
+  });
+}
+
+/* Carrega todos os itens da lista */
+async function spLoad() {
+  try {
+    const r = await fetch(`${SP_API}?$select=Id,Title,Area,Esforco,Valor,Descricao,Prazo&$top=500`, {
+      headers: SP_HEADERS, credentials: "include", cache: "no-store"
+    });
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d.d.results.map(spItemToProject);
+  } catch(e) { console.warn("SP load:", e); return null; }
+}
+
+/* Adiciona novo item */
+async function spAddItem(p) {
+  const digest = await getDigest();
+  if (!digest) throw new Error("no digest");
+  const r = await fetch(SP_API, {
+    method: "POST",
+    headers: { ...SP_HEADERS, "X-RequestDigest": digest },
+    credentials: "include",
+    body: projectToSpBody(p)
+  });
+  if (!r.ok) throw new Error("add failed " + r.status);
+  const d = await r.json();
+  return d.d.Id;  // retorna o ID gerado pelo SP
+}
+
+/* Atualiza item existente */
+async function spUpdateItem(p) {
+  const digest = await getDigest();
+  if (!digest) throw new Error("no digest");
+  const r = await fetch(`${SP_API}(${p.spId})`, {
+    method: "POST",
+    headers: {
+      ...SP_HEADERS,
+      "X-RequestDigest": digest,
+      "X-HTTP-Method":   "MERGE",
+      "IF-MATCH":        "*"
+    },
+    credentials: "include",
+    body: projectToSpBody(p)
+  });
+  if (!r.ok) throw new Error("update failed " + r.status);
+}
+
+/* Exclui item */
+async function spDeleteItem(spId) {
+  const digest = await getDigest();
+  if (!digest) throw new Error("no digest");
+  const r = await fetch(`${SP_API}(${spId})`, {
+    method: "POST",
+    headers: {
+      ...SP_HEADERS,
+      "X-RequestDigest": digest,
+      "X-HTTP-Method":   "DELETE",
+      "IF-MATCH":        "*"
+    },
+    credentials: "include"
+  });
+  if (!r.ok) throw new Error("delete failed " + r.status);
+}
+
+/* ── PERSISTENCE wrappers chamados pelo app ── */
+function save() {
+  // não usado diretamente — cada operação chama spAddItem/spUpdateItem/spDeleteItem
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)); } catch{}
+}
+
+async function load() {
+  setSyncStatus("connecting");
+  const remote = await spLoad();
+  if (Array.isArray(remote)) {
+    projects    = remote;
+    lastPollStr = JSON.stringify(remote);
+    setSyncStatus("loaded");
+  } else {
+    try {
+      const d = localStorage.getItem(STORAGE_KEY);
+      if (d) projects = JSON.parse(d);
+    } catch { projects = []; }
+    setSyncStatus("offline");
+    toast("⚠️ Não foi possível conectar ao SharePoint. Usando dados locais.", "error");
+  }
+}
+
+/* Poll a cada 30s */
+async function pollSharePoint() {
+  const remote = await spLoad();
+  if (!Array.isArray(remote)) return;
+  const remoteStr = JSON.stringify(remote);
+  if (remoteStr !== lastPollStr) {
+    lastPollStr = remoteStr;
+    projects    = remote;
+    render();
+    toast("🔄 Lista atualizada", "success");
+  }
+}
+
+/* ══════════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════════ */
+function classify(esforco, valor) {
+  if (esforco <= 5 && valor > 5)  return { key:"win",   label:"Quick Win",       tag:"tag-win",   color:"#00e5c0" };
+  if (esforco > 5  && valor > 5)  return { key:"strat", label:"Estratégico",     tag:"tag-strat", color:"#6c63ff" };
+  if (esforco <= 5 && valor <= 5) return { key:"low",   label:"Baixa Prioridade",tag:"tag-low",   color:"#ffc107" };
+                                  return { key:"disc",  label:"Descartar",        tag:"tag-disc",  color:"#ff4d6d" };
+}
+
+function toast(msg, type="success") {
+  const c = document.getElementById("toastContainer");
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), 3200);
+}
+
+function resetForm() {
+  document.getElementById("fNome").value = "";
+  document.getElementById("fDesc").value = "";
+  document.getElementById("fPrazo").value = "";
+  document.getElementById("fEsforco").value = 5;
+  document.getElementById("fValor").value = 5;
+  document.getElementById("vEsforco").textContent = 5;
+  document.getElementById("vValor").textContent = 5;
+  editingId = null;
+  updateFormState();
+  updatePillPreview();
+}
+
+function updateFormState() {
+  const isEdit = editingId !== null;
+  document.getElementById("form-section-label").textContent = isEdit ? "Editar Projeto" : "Novo Projeto";
+  document.getElementById("btnSalvar").textContent = isEdit ? "Salvar Alterações" : "Plotar na Matriz";
+  document.getElementById("btnSalvar").classList.toggle("edit-mode", isEdit);
+  document.getElementById("btnCancelarEdit").style.display = isEdit ? "" : "none";
+}
+
+function updatePillPreview() {
+  const e = parseInt(document.getElementById("fEsforco").value);
+  const v = parseInt(document.getElementById("fValor").value);
+  const cls = classify(e, v);
+  document.getElementById("pillDot").style.background = cls.color;
+  document.getElementById("pillText").textContent = cls.label + ` (E:${e} V:${v})`;
+}
+
+/* ══════════════════════════════════════════════════════════
+   RENDER MATRIX
+══════════════════════════════════════════════════════════ */
+function renderMatrix() {
+  const layer = document.getElementById("dotsLayer");
+  layer.innerHTML = "";
+
+  const visible = getFilteredProjects();
+  const all = projects;
+
+  // build legend
+  const usedAreas = [...new Set(all.map(p => p.area))];
+  const legend = document.getElementById("matrixLegend");
+  legend.innerHTML = "";
+  usedAreas.forEach(area => {
+    const item = document.createElement("div");
+    item.className = "legend-item" + (filterArea === area ? " active" : "");
+    item.innerHTML = `<div class="legend-dot" style="background:${areaColor(area)}"></div>${area}`;
+    item.style.border = filterArea === area ? "1px solid var(--border)" : "";
+    item.onclick = () => { filterArea = filterArea === area ? null : area; render(); };
+    legend.appendChild(item);
+  });
+
+  all.forEach(p => {
+    const isVisible = visible.find(v => v.id === p.id);
+    const cls = classify(p.esforco, p.valor);
+
+    const dot = document.createElement("div");
+    dot.className = "dot" + (isVisible ? "" : " dimmed");
+
+    const posX = ((p.esforco - 1) / 9) * 100;
+    const posY = ((p.valor    - 1) / 9) * 100;
+    dot.style.left   = `${posX}%`;
+    dot.style.bottom = `${posY}%`;
+    dot.style.background = areaColor(p.area);
+
+    // size based on valor
+    const sz = 18 + (p.valor / 10) * 10;
+    dot.style.width  = `${sz}px`;
+    dot.style.height = `${sz}px`;
+
+    const prazoTxt = p.prazo ? `<span>📅 <b>${p.prazo}</b></span>` : "";
+    const descTxt  = p.desc  ? `<span style="max-width:200px;white-space:normal;font-size:11px;color:var(--text-muted);margin-top:4px;display:block;">${p.desc.substring(0,80)}${p.desc.length>80?"…":""}</span>` : "";
+
+    dot.innerHTML = `
+      <div class="dot-tooltip">
+        <strong>${p.nome}</strong>
+        <span>Área: <b>${p.area}</b></span>
+        <span>Esforço: <b>${p.esforco}/10</b></span>
+        <span>Valor: <b>${p.valor}/10</b></span>
+        <span>Status: <b style="color:${cls.color}">${cls.label}</b></span>
+        ${prazoTxt}
+        ${descTxt}
+      </div>
+    `;
+
+    if (isVisible) {
+      dot.onclick = () => { filterArea = null; filterQuad = null; editProject(p.id); };
+    }
+    layer.appendChild(dot);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   RENDER SIDEBAR
+══════════════════════════════════════════════════════════ */
+function getFilteredProjects() {
+  return projects.filter(p => {
+    if (filterArea && p.area !== filterArea) return false;
+    if (filterQuad && classify(p.esforco, p.valor).key !== filterQuad) return false;
+    if (searchQuery && !p.nome.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function renderSidebar() {
+  const filtered = getFilteredProjects();
+
+  // ── count ──
+  document.getElementById("projCount").textContent = filtered.length;
+
+  // ── area chips ──
+  const chips = document.getElementById("areaChips");
+  chips.innerHTML = "";
+  const usedAreas = [...new Set(projects.map(p => p.area))];
+  usedAreas.forEach(area => {
+    const c = document.createElement("div");
+    c.className = "chip" + (filterArea === area ? " active" : "");
+    c.textContent = area;
+    c.onclick = () => { filterArea = filterArea === area ? null : area; render(); };
+    chips.appendChild(c);
+  });
+
+  // ── project list ──
+  const list = document.getElementById("projList");
+  list.innerHTML = "";
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="icon">🔍</div>Nenhum projeto encontrado.</div>`;
+  } else {
+    filtered.forEach(p => {
+      const cls = classify(p.esforco, p.valor);
+      const item = document.createElement("div");
+      item.className = "proj-item";
+      const editBtn = unlocked ? `<button class="proj-btn edit-btn" title="Editar" onclick="editProject(${p.id})">✏️</button>` : "";
+      const delBtn  = unlocked ? `<button class="proj-btn del" title="Excluir" onclick="askDelete(${p.id})">✕</button>` : "";
+      const prazoTag = p.prazo ? `<span class="tag" style="background:rgba(255,255,255,.06);color:var(--text-muted)">📅 ${p.prazo}</span>` : "";
+      item.innerHTML = `
+        <div class="proj-dot" style="background:${areaColor(p.area)}"></div>
+        <div class="proj-body">
+          <div class="proj-name">${p.nome}</div>
+          <div class="proj-meta">${p.area} · E:${p.esforco} V:${p.valor}</div>
+          <div class="proj-tags">
+            <span class="tag ${cls.tag}">${cls.label}</span>
+            ${prazoTag}
+          </div>
+        </div>
+        <div class="proj-actions">${editBtn}${delBtn}</div>
+      `;
+      list.appendChild(item);
+    });
+  }
+
+  // ── lock ──
+  document.getElementById("lockLabel").textContent = unlocked ? "🔓 destravado" : "🔒 bloqueado";
+  document.getElementById("lockBannerText").textContent = unlocked ? "Edição e exclusão liberadas" : "Exclusão e edição bloqueadas";
+  document.getElementById("btnLock").textContent = unlocked ? "Bloquear" : "Destravar";
+
+  // ── ranking ──
+  const rankQ = [...filtered].sort((a,b) => b.valor - a.valor || a.esforco - b.esforco);
+  const rankList = document.getElementById("rankingList");
+  rankList.innerHTML = "";
+  rankQ.slice(0,10).forEach((p, i) => {
+    const medalClass = i===0?"gold":i===1?"silver":i===2?"bronze":"";
+    const cls = classify(p.esforco, p.valor);
+    const item = document.createElement("div");
+    item.className = "rank-item";
+    item.innerHTML = `
+      <div class="rank-num ${medalClass}">${i+1}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.nome}</div>
+        <div style="font-size:11px;color:var(--text-muted);">${p.area} · V:${p.valor} E:${p.esforco}</div>
+      </div>
+      <span class="tag ${cls.tag}">${cls.label}</span>
+    `;
+    rankList.appendChild(item);
+  });
+  if (rankQ.length === 0) rankList.innerHTML = `<div class="empty-state"><div class="icon">🏆</div>Sem dados.</div>`;
+
+  // ── quad cards ──
+  let cWin=0,cStrat=0,cLow=0,cDisc=0;
+  filtered.forEach(p => {
+    const k = classify(p.esforco, p.valor).key;
+    if(k==="win") cWin++; if(k==="strat") cStrat++; if(k==="low") cLow++; if(k==="disc") cDisc++;
+  });
+  const qg = document.getElementById("quadGrid");
+  qg.innerHTML = `
+    <div class="quad-card qc-win ${filterQuad==="win"?"active":""}" onclick="toggleQuad('win')">
+      <div class="qc-label">Quick Wins</div>
+      <div class="qc-count">${cWin}</div>
+      <div class="qc-sub">baixo esforço · alto valor</div>
+    </div>
+    <div class="quad-card qc-strat ${filterQuad==="strat"?"active":""}" onclick="toggleQuad('strat')">
+      <div class="qc-label">Estratégicos</div>
+      <div class="qc-count">${cStrat}</div>
+      <div class="qc-sub">alto esforço · alto valor</div>
+    </div>
+    <div class="quad-card qc-low ${filterQuad==="low"?"active":""}" onclick="toggleQuad('low')">
+      <div class="qc-label">Baixa Prioridade</div>
+      <div class="qc-count">${cLow}</div>
+      <div class="qc-sub">baixo esforço · baixo valor</div>
+    </div>
+    <div class="quad-card qc-disc ${filterQuad==="disc"?"active":""}" onclick="toggleQuad('disc')">
+      <div class="qc-label">Descartar</div>
+      <div class="qc-count">${cDisc}</div>
+      <div class="qc-sub">alto esforço · baixo valor</div>
+    </div>
+  `;
+
+  // ── stats ──
+  const avgV = projects.length ? (projects.reduce((s,p)=>s+p.valor,0)/projects.length).toFixed(1) : "—";
+  const avgE = projects.length ? (projects.reduce((s,p)=>s+p.esforco,0)/projects.length).toFixed(1) : "—";
+  document.getElementById("statsRow").innerHTML = `
+    <div class="stat-box"><div class="sv">${projects.length}</div><div class="sl">Projetos</div></div>
+    <div class="stat-box"><div class="sv" style="color:var(--accent2)">${avgV}</div><div class="sl">Avg Valor</div></div>
+    <div class="stat-box"><div class="sv" style="color:#ff4d6d">${avgE}</div><div class="sl">Avg Esforço</div></div>
+  `;
+
+  // ── area table ──
+  const tbody = document.getElementById("areaTableBody");
+  tbody.innerHTML = "";
+  AREAS.forEach(a => {
+    const pp = projects.filter(p => p.area === a.name);
+    if (!pp.length) return;
+    const avgVA = (pp.reduce((s,p)=>s+p.valor,0)/pp.length).toFixed(1);
+    const avgEA = (pp.reduce((s,p)=>s+p.esforco,0)/pp.length).toFixed(1);
+    const tr = document.createElement("tr");
+    if (filterArea === a.name) tr.className = "active";
+    tr.onclick = () => { filterArea = filterArea===a.name?null:a.name; render(); };
+    tr.innerHTML = `
+      <td><span class="area-dot" style="background:${a.color}"></span>${a.name}</td>
+      <td><strong>${pp.length}</strong></td>
+      <td>${avgVA}</td>
+      <td>${avgEA}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ══════════════════════════════════════════════════════════
+   RENDER CHARTS
+══════════════════════════════════════════════════════════ */
+function renderCharts() {
+  const all = projects;
+
+  let cWin=0,cStrat=0,cLow=0,cDisc=0;
+  all.forEach(p => {
+    const k = classify(p.esforco, p.valor).key;
+    if(k==="win") cWin++; if(k==="strat") cStrat++; if(k==="low") cLow++; if(k==="disc") cDisc++;
+  });
+
+  const labels=[], data=[], colors=[], avgVArr=[], avgEArr=[];
+  AREAS.forEach(a => {
+    const pp = all.filter(p => p.area === a.name);
+    if (!pp.length) return;
+    labels.push(a.name);
+    data.push(pp.length);
+    colors.push(a.color);
+    avgVArr.push((pp.reduce((s,p)=>s+p.valor,0)/pp.length).toFixed(1));
+    avgEArr.push((pp.reduce((s,p)=>s+p.esforco,0)/pp.length).toFixed(1));
+  });
+
+  const isDark = document.body.getAttribute("data-theme") !== "light";
+  const gridColor = isDark ? "rgba(255,255,255,.06)" : "rgba(0,0,0,.07)";
+  const labelColor = isDark ? "#7b82a8" : "#6b7280";
+  const tooltipBg = isDark ? "#1a1d27" : "#ffffff";
+  const tooltipText = isDark ? "#e8eaf6" : "#1a1d27";
+
+  const sharedOpts = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { labels: { color: labelColor, font: { size: 11 } } },
+      tooltip: { backgroundColor: tooltipBg, titleColor: tooltipText, bodyColor: tooltipText }
+    },
+    scales: {
+      x: { ticks: { color: labelColor }, grid: { color: gridColor } },
+      y: { ticks: { color: labelColor }, grid: { color: gridColor } }
+    }
+  };
+
+  if (chartSaude)   { chartSaude.destroy();   chartSaude   = null; }
+  if (chartDemanda) { chartDemanda.destroy();  chartDemanda = null; }
+  if (chartVE)      { chartVE.destroy();       chartVE      = null; }
+
+  chartSaude = new Chart(document.getElementById("chartSaude"), {
+    type: "doughnut",
+    data: {
+      labels: ["Quick Wins","Estratégicos","Baixa Prioridade","Descartar"],
+      datasets: [{ data:[cWin,cStrat,cLow,cDisc], backgroundColor:["#00e5c0","#6c63ff","#ffc107","#ff4d6d"], borderWidth:0 }]
+    },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: {
+        legend:{ position:"right", labels:{ color:labelColor, font:{size:10}, boxWidth:12 } },
+        tooltip:{ backgroundColor:tooltipBg, titleColor:tooltipText, bodyColor:tooltipText }
+      },
+      onClick:(e,els)=>{ if(els.length){ const m=["win","strat","low","disc"]; toggleQuad(m[els[0].index]); } }
+    }
+  });
+
+  chartDemanda = new Chart(document.getElementById("chartDemanda"), {
+    type:"bar",
+    data:{ labels, datasets:[{ label:"Projetos", data, backgroundColor:colors, borderRadius:4 }] },
+    options:{ ...sharedOpts, indexAxis:"y", plugins:{ legend:{display:false}, tooltip:sharedOpts.plugins.tooltip },
+      scales:{ x:{...sharedOpts.scales.x, ticks:{...sharedOpts.scales.x.ticks,stepSize:1}}, y:{...sharedOpts.scales.y, ticks:{...sharedOpts.scales.y.ticks,autoSkip:false}} },
+      onClick:(e,els)=>{ if(els.length){ const area=labels[els[0].index]; filterArea=filterArea===area?null:area; render(); } }
+    }
+  });
+
+  chartVE = new Chart(document.getElementById("chartVE"), {
+    type:"bar",
+    data:{ labels, datasets:[
+      { label:"Média Valor",   data:avgVArr, backgroundColor:"#00e5c0", borderRadius:3 },
+      { label:"Média Esforço", data:avgEArr, backgroundColor:"#6c63ff", borderRadius:3 }
+    ]},
+    options:{ ...sharedOpts,
+      scales:{ x:{...sharedOpts.scales.x, ticks:{...sharedOpts.scales.x.ticks,autoSkip:false,maxRotation:45,minRotation:30}}, y:{...sharedOpts.scales.y, max:10} }
+    }
+  });
+}
+
+function render() {
+  renderSidebar();
+  renderMatrix();
+  renderCharts();
+  save();
+}
+
+/* ══════════════════════════════════════════════════════════
+   FORM EVENTS
+══════════════════════════════════════════════════════════ */
+function toggleQuad(key) {
+  filterQuad = filterQuad === key ? null : key;
+  render();
+}
+
+document.getElementById("fEsforco").addEventListener("input", function() {
+  document.getElementById("vEsforco").textContent = this.value;
+  updatePillPreview();
+});
+document.getElementById("fValor").addEventListener("input", function() {
+  document.getElementById("vValor").textContent = this.value;
+  updatePillPreview();
+});
+
+document.getElementById("searchInput").addEventListener("input", function() {
+  searchQuery = this.value;
+  render();
+});
+
+document.getElementById("btnSalvar").addEventListener("click", async () => {
+  const nome = document.getElementById("fNome").value.trim();
+  if (!nome) { toast("Informe o nome do projeto.", "error"); document.getElementById("fNome").focus(); return; }
+
+  const payload = {
+    nome,
+    area:   document.getElementById("fArea").value,
+    desc:   document.getElementById("fDesc").value.trim(),
+    prazo:  document.getElementById("fPrazo").value,
+    esforco:parseInt(document.getElementById("fEsforco").value),
+    valor:  parseInt(document.getElementById("fValor").value),
+  };
+
+  setSyncStatus("syncing");
+  document.getElementById("btnSalvar").disabled = true;
+
+  try {
+    if (editingId !== null) {
+      const p = projects.find(p => p.id === editingId);
+      if (p) {
+        Object.assign(p, payload);
+        await spUpdateItem(p);
+        toast("Projeto atualizado! ✏️");
+      }
+    } else {
+      const newProj = { ...payload, id: Date.now(), spId: null };
+      const spId = await spAddItem(newProj);
+      newProj.id   = spId;
+      newProj.spId = spId;
+      projects.push(newProj);
+      toast("Projeto plotado! ✦");
+    }
+    lastPollStr = JSON.stringify(projects);
+    setSyncStatus("ok");
+  } catch(e) {
+    console.warn("save error:", e);
+    toast("Erro ao salvar no SharePoint. Verifique sua conexão.", "error");
+    setSyncStatus("error");
+  } finally {
+    document.getElementById("btnSalvar").disabled = false;
+  }
+
+  resetForm();
+  render();
+});
+
+document.getElementById("btnCancelarEdit").addEventListener("click", () => { resetForm(); render(); });
+
+function editProject(id) {
+  if (!unlocked) { toast("Desbloqueie para editar.", "error"); return; }
+  const p = projects.find(p => p.id === id);
+  if (!p) return;
+  editingId = id;
+  document.getElementById("fNome").value   = p.nome;
+  document.getElementById("fArea").value   = p.area;
+  document.getElementById("fDesc").value   = p.desc   || "";
+  document.getElementById("fPrazo").value  = p.prazo  || "";
+  document.getElementById("fEsforco").value = p.esforco;
+  document.getElementById("fValor").value   = p.valor;
+  document.getElementById("vEsforco").textContent = p.esforco;
+  document.getElementById("vValor").textContent   = p.valor;
+  updateFormState();
+  updatePillPreview();
+  // switch to cadastro tab
+  activateTab("cadastro");
+  document.getElementById("fNome").scrollIntoView({ behavior:"smooth", block:"center" });
+}
+
+function askDelete(id) {
+  const p = projects.find(p => p.id === id);
+  if (!p) return;
+  deleteTargetId = id;
+  document.getElementById("modalDeleteName").textContent = `"${p.nome}" será removido permanentemente.`;
+  document.getElementById("modalDelete").classList.add("open");
+}
+document.getElementById("btnDeleteCancel").onclick  = () => { document.getElementById("modalDelete").classList.remove("open"); deleteTargetId=null; };
+document.getElementById("btnDeleteConfirm").onclick = async () => {
+  const p = projects.find(p => p.id === deleteTargetId);
+  document.getElementById("modalDelete").classList.remove("open");
+  if (!p) return;
+  setSyncStatus("syncing");
+  try {
+    await spDeleteItem(p.spId || p.id);
+    projects = projects.filter(p => p.id !== deleteTargetId);
+    lastPollStr = JSON.stringify(projects);
+    setSyncStatus("ok");
+    toast("Projeto removido.", "error");
+  } catch(e) {
+    console.warn("delete error:", e);
+    toast("Erro ao excluir no SharePoint.", "error");
+    setSyncStatus("error");
+  }
+  deleteTargetId = null;
+  render();
+};
+
+/* ══════════════════════════════════════════════════════════
+   LOCK / UNLOCK
+══════════════════════════════════════════════════════════ */
+document.getElementById("btnLock").addEventListener("click", () => {
+  if (unlocked) { unlocked = false; render(); toast("Bloqueado. 🔒"); return; }
+  document.getElementById("lockPasswordInput").value = "";
+  document.getElementById("lockError").style.display = "none";
+  document.getElementById("modalLock").classList.add("open");
+  setTimeout(()=> document.getElementById("lockPasswordInput").focus(), 100);
+});
+document.getElementById("btnLockCancel").onclick = () => document.getElementById("modalLock").classList.remove("open");
+document.getElementById("btnLockConfirm").onclick = () => {
+  const pw = document.getElementById("lockPasswordInput").value;
+  if (pw === ADMIN_PASS) {
+    unlocked = true;
+    document.getElementById("modalLock").classList.remove("open");
+    toast("Destravado. 🔓");
+    render();
+  } else {
+    document.getElementById("lockError").style.display = "block";
+  }
+};
+document.getElementById("lockPasswordInput").addEventListener("keydown", e => { if(e.key==="Enter") document.getElementById("btnLockConfirm").click(); });
+
+/* ══════════════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════════════ */
+function activateTab(name) {
+  document.querySelectorAll(".sidebar-tab").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("active", p.id === "tab-"+name));
+}
+document.querySelectorAll(".sidebar-tab").forEach(btn => {
+  btn.addEventListener("click", () => activateTab(btn.dataset.tab));
+});
+
+/* ══════════════════════════════════════════════════════════
+   THEME
+══════════════════════════════════════════════════════════ */
+document.getElementById("btnTheme").addEventListener("click", () => {
+  const isLight = document.body.getAttribute("data-theme") === "light";
+  document.body.setAttribute("data-theme", isLight ? "dark" : "light");
+  document.getElementById("btnTheme").textContent = isLight ? "🌙" : "☀️";
+  renderCharts();
+});
+
+/* ══════════════════════════════════════════════════════════
+   EXPORT / IMPORT
+══════════════════════════════════════════════════════════ */
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportJSON() {
+  downloadFile(JSON.stringify(projects, null, 2), "matriz_backup.json", "application/json");
+  toast("JSON exportado! 💾");
+}
+document.getElementById("btnExportJSON").addEventListener("click", exportJSON);
+document.getElementById("btnExportJSON2").addEventListener("click", exportJSON);
+
+document.getElementById("btnExportCSV").addEventListener("click", () => {
+  const header = "id,nome,area,esforco,valor,desc,prazo,classificacao\n";
+  const rows = projects.map(p => {
+    const cls = classify(p.esforco, p.valor).label;
+    const desc = (p.desc||"").replace(/,/g,"·").replace(/\n/g," ");
+    return `${p.id},"${p.nome}","${p.area}",${p.esforco},${p.valor},"${desc}","${p.prazo||""}","${cls}"`;
+  }).join("\n");
+  downloadFile(header+rows, "matriz_export.csv", "text/csv;charset=utf-8");
+  toast("CSV exportado! 📊");
+});
+
+document.getElementById("btnPrint").addEventListener("click", () => window.print());
+
+// Import JSON
+document.getElementById("btnImport").addEventListener("click", () => document.getElementById("fileInput").click());
+document.getElementById("fileInput").addEventListener("change", function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (Array.isArray(data)) {
+        projects = data;
+        save();
+        render();
+        toast(`${data.length} projetos importados! 📂`);
+      } else { toast("Formato JSON inválido.", "error"); }
+    } catch { toast("Erro ao ler o arquivo.", "error"); }
+  };
+  reader.readAsText(file);
+  this.value = "";
+});
+
+// Import CSV
+document.getElementById("btnImportCSV").addEventListener("click", () => document.getElementById("csvFileInput").click());
+document.getElementById("csvFileInput").addEventListener("change", function() {
+  const file = this.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const lines = e.target.result.split("\n").slice(1).filter(l => l.trim());
+    let count = 0;
+    lines.forEach(line => {
+      const cols = line.match(/(".*?"|[^,]+)(?=,|$)/g);
+      if (!cols || cols.length < 5) return;
+      const clean = cols.map(c => c.replace(/^"|"$/g,"").trim());
+      projects.push({
+        id:     Date.now() + Math.random(),
+        nome:   clean[1] || "Sem nome",
+        area:   clean[2] || "Outra",
+        esforco:parseInt(clean[3]) || 5,
+        valor:  parseInt(clean[4]) || 5,
+        desc:   clean[5] || "",
+        prazo:  clean[6] || "",
+      });
+      count++;
+    });
+    save(); render();
+    toast(`${count} projetos importados via CSV! ⬆`);
+  };
+  reader.readAsText(file);
+  this.value = "";
+});
+
+/* ══════════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════════ */
+// Populate area select
+const areaSelect = document.getElementById("fArea");
+AREAS.forEach(a => {
+  const opt = document.createElement("option");
+  opt.value = a.name;
+  opt.textContent = a.name;
+  areaSelect.appendChild(opt);
+});
+
+// Refresh button
+document.getElementById("btnRefresh").addEventListener("click", async () => {
+  setSyncStatus("connecting");
+  const remote = await spLoad();
+  if (Array.isArray(remote)) {
+    projects    = remote;
+    lastPollStr = JSON.stringify(remote);
+    render();
+    toast("🔄 Dados recarregados do SharePoint", "success");
+    setSyncStatus("loaded");
+  } else {
+    toast("Não foi possível conectar ao SharePoint.", "error");
+    setSyncStatus("offline");
+  }
+});
+
+(async () => {
+  await load();
+  updatePillPreview();
+  render();
+  // poll a cada 30s para pegar alterações de outros usuários
+  setInterval(pollSharePoint, 30000);
+})();
+</script>
+</body>
+</html>
