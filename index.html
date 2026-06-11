@@ -722,7 +722,7 @@ select option { background: #1a1d27; }
   </div>
   <div class="topbar-actions">
     <span id="syncStatus" style="font-size:11px;color:var(--text-muted);margin-right:6px;">⏳ Conectando…</span>
-    <button class="btn-icon" id="btnRefresh" title="Recarregar dados do SharePoint">🔄</button>
+    <button class="btn-icon" id="btnRefresh" title="Recarregar dados">🔄</button>
     <button class="btn-icon" id="btnTheme" title="Alternar tema">🌙</button>
     <button class="btn-icon" id="btnImport" title="Importar JSON">📂</button>
     <button class="btn-icon" id="btnExportJSON" title="Exportar JSON (backup)">💾</button>
@@ -977,16 +977,18 @@ let deleteTargetId = null;
 let chartSaude = null, chartDemanda = null, chartVE = null;
 
 /* ══════════════════════════════════════════════════════════
-   SHAREPOINT LIST API — Fresenius
-   Lê e grava na lista "MatrizProjetos" via REST API nativa
-   do SharePoint. Usa autenticação M365 do navegador.
+   JSONBIN.IO — banco de dados central compartilhado
+   Todos os usuários lêem e gravam no mesmo bin.
+   API Key: gerada pelo usuário no jsonbin.io
 ══════════════════════════════════════════════════════════ */
-const SP_SITE      = "https://fresenius.sharepoint.com/teams/Team-FK-BR-Melhoria_Continua_E_Transformacao_Digital-Facilitadores";
-const SP_LIST      = "MatrizProjetos";
-const SP_API       = `${SP_SITE}/_api/web/lists/getbytitle('${SP_LIST}')/items`;
-const SP_HEADERS   = { "Accept": "application/json;odata=verbose", "Content-Type": "application/json;odata=verbose" };
+const JSONBIN_KEY  = "$2a$10$cA0Jg5F/Y4fdBcnuVg0tsePfXI/FZ8O.6PwT..vsWo5Xgp1ZFtT5i";
+const JSONBIN_BASE = "https://api.jsonbin.io/v3/b";
+// ID do "bin" compartilhado — TODOS os usuários devem ter o MESMO valor aqui.
+// Se estiver vazio, o primeiro usuário a abrir cria o bin automaticamente
+// e o ID aparecerá no console / num aviso para você colar aqui.
+const JSONBIN_ID_FIXED = "";
+let   JSONBIN_ID   = JSONBIN_ID_FIXED || localStorage.getItem("jsonbin_id") || null;
 
-let spSyncing  = false;
 let lastPollStr = "";
 
 function setSyncStatus(state) {
@@ -1005,139 +1007,99 @@ function setSyncStatus(state) {
   el.style.color  = color;
 }
 
-async function getDigest() {
-  try {
-    const r = await fetch(`${SP_SITE}/_api/contextinfo`, {
-      method: "POST", headers: SP_HEADERS, credentials: "include"
-    });
-    const d = await r.json();
-    return d.d.GetContextWebInformation.FormDigestValue;
-  } catch { return null; }
-}
+const JB_HEADERS = {
+  "Content-Type":  "application/json",
+  "X-Master-Key":  JSONBIN_KEY,
+  "X-Bin-Private": "false",
+};
 
-/* Converte item da lista SP → objeto projeto */
-function spItemToProject(item) {
-  return {
-    id:     item.Id,                          // ID numérico do SP (usado para update/delete)
-    spId:   item.Id,
-    nome:   item.Title        || "",
-    area:   item.Area         || "Outra",
-    esforco:parseInt(item.Esforco) || 5,
-    valor:  parseInt(item.Valor)   || 5,
-    desc:   item.Descricao    || "",
-    prazo:  item.Prazo ? item.Prazo.substring(0,10) : "",
-  };
-}
-
-/* Converte objeto projeto → body para API SP */
-function projectToSpBody(p) {
-  return JSON.stringify({
-    __metadata: { type: `SP.Data.${SP_LIST}ListItem` },
-    Title:      p.nome,
-    Area:       p.area,
-    Esforco:    p.esforco,
-    Valor:      p.valor,
-    Descricao:  p.desc  || "",
-    Prazo:      p.prazo ? p.prazo + "T00:00:00Z" : null,
+/* Cria o bin na primeira vez */
+async function jbCreate(data) {
+  const r = await fetch(JSONBIN_BASE, {
+    method: "POST",
+    headers: { ...JB_HEADERS, "X-Bin-Name": "MatrizProjetos" },
+    body: JSON.stringify({ projects: data })
   });
+  if (!r.ok) throw new Error("create failed " + r.status);
+  const d = await r.json();
+  JSONBIN_ID = d.metadata.id;
+  localStorage.setItem("jsonbin_id", JSONBIN_ID);
+  return JSONBIN_ID;
 }
 
-/* Carrega todos os itens da lista */
-async function spLoad() {
+/* Lê os dados do bin */
+async function jbLoad() {
   try {
-    const r = await fetch(`${SP_API}?$select=Id,Title,Area,Esforco,Valor,Descricao,Prazo&$top=500`, {
-      headers: SP_HEADERS, credentials: "include", cache: "no-store"
+    if (!JSONBIN_ID) return null;
+    const r = await fetch(`${JSONBIN_BASE}/${JSONBIN_ID}/latest`, {
+      headers: { "X-Master-Key": JSONBIN_KEY }
     });
     if (!r.ok) return null;
     const d = await r.json();
-    return d.d.results.map(spItemToProject);
-  } catch(e) { console.warn("SP load:", e); return null; }
+    return Array.isArray(d.record?.projects) ? d.record.projects : null;
+  } catch(e) { console.warn("jbLoad:", e); return null; }
 }
 
-/* Adiciona novo item */
-async function spAddItem(p) {
-  const digest = await getDigest();
-  if (!digest) throw new Error("no digest");
-  const r = await fetch(SP_API, {
-    method: "POST",
-    headers: { ...SP_HEADERS, "X-RequestDigest": digest },
-    credentials: "include",
-    body: projectToSpBody(p)
-  });
-  if (!r.ok) throw new Error("add failed " + r.status);
-  const d = await r.json();
-  return d.d.Id;  // retorna o ID gerado pelo SP
+/* Salva todos os dados no bin */
+async function jbSave(data) {
+  try {
+    if (!JSONBIN_ID) await jbCreate(data);
+    const r = await fetch(`${JSONBIN_BASE}/${JSONBIN_ID}`, {
+      method:  "PUT",
+      headers: JB_HEADERS,
+      body:    JSON.stringify({ projects: data })
+    });
+    if (!r.ok) throw new Error("save failed " + r.status);
+    lastPollStr = JSON.stringify(data);
+  } catch(e) { throw e; }
 }
 
-/* Atualiza item existente */
-async function spUpdateItem(p) {
-  const digest = await getDigest();
-  if (!digest) throw new Error("no digest");
-  const r = await fetch(`${SP_API}(${p.spId})`, {
-    method: "POST",
-    headers: {
-      ...SP_HEADERS,
-      "X-RequestDigest": digest,
-      "X-HTTP-Method":   "MERGE",
-      "IF-MATCH":        "*"
-    },
-    credentials: "include",
-    body: projectToSpBody(p)
-  });
-  if (!r.ok) throw new Error("update failed " + r.status);
-}
-
-/* Exclui item */
-async function spDeleteItem(spId) {
-  const digest = await getDigest();
-  if (!digest) throw new Error("no digest");
-  const r = await fetch(`${SP_API}(${spId})`, {
-    method: "POST",
-    headers: {
-      ...SP_HEADERS,
-      "X-RequestDigest": digest,
-      "X-HTTP-Method":   "DELETE",
-      "IF-MATCH":        "*"
-    },
-    credentials: "include"
-  });
-  if (!r.ok) throw new Error("delete failed " + r.status);
-}
-
-/* ── PERSISTENCE wrappers chamados pelo app ── */
+/* ── PERSISTENCE wrappers ── */
 function save() {
-  // não usado diretamente — cada operação chama spAddItem/spUpdateItem/spDeleteItem
+  // fallback local sempre
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)); } catch{}
 }
 
 async function load() {
   setSyncStatus("connecting");
-  const remote = await spLoad();
-  if (Array.isArray(remote)) {
-    projects    = remote;
-    lastPollStr = JSON.stringify(remote);
-    setSyncStatus("loaded");
-  } else {
-    try {
-      const d = localStorage.getItem(STORAGE_KEY);
-      if (d) projects = JSON.parse(d);
-    } catch { projects = []; }
-    setSyncStatus("offline");
-    toast("⚠️ Não foi possível conectar ao SharePoint. Usando dados locais.", "error");
-  }
+  try {
+    if (!JSONBIN_ID) {
+      await jbCreate([]);
+      // mostra o ID gerado para o admin colar em JSONBIN_ID_FIXED
+      toast(`⚠️ Configuração necessária! Bin ID: ${JSONBIN_ID} — copie e envie para configurar de forma fixa.`, "error");
+      console.log("JSONBIN_ID gerado:", JSONBIN_ID);
+    }
+    const remote = await jbLoad();
+    if (Array.isArray(remote)) {
+      projects    = remote;
+      lastPollStr = JSON.stringify(remote);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)); } catch{}
+      setSyncStatus("loaded");
+      return;
+    }
+  } catch(e) { console.warn("load:", e); }
+  // fallback localStorage
+  try {
+    const d = localStorage.getItem(STORAGE_KEY);
+    if (d) projects = JSON.parse(d);
+  } catch { projects = []; }
+  setSyncStatus("offline");
+  toast("⚠️ Modo offline — dados locais.", "error");
 }
 
-/* Poll a cada 30s */
+/* Poll a cada 30s — pega alterações de outros usuários */
 async function pollSharePoint() {
-  const remote = await spLoad();
-  if (!Array.isArray(remote)) return;
-  const remoteStr = JSON.stringify(remote);
-  if (remoteStr !== lastPollStr) {
-    lastPollStr = remoteStr;
-    projects    = remote;
-    render();
-    toast("🔄 Lista atualizada", "success");
-  }
+  try {
+    const remote = await jbLoad();
+    if (!Array.isArray(remote)) return;
+    const remoteStr = JSON.stringify(remote);
+    if (remoteStr !== lastPollStr) {
+      lastPollStr = remoteStr;
+      projects    = remote;
+      render();
+      toast("🔄 Lista atualizada", "success");
+    }
+  } catch{}
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -1528,22 +1490,17 @@ document.getElementById("btnSalvar").addEventListener("click", async () => {
       const p = projects.find(p => p.id === editingId);
       if (p) {
         Object.assign(p, payload);
-        await spUpdateItem(p);
         toast("Projeto atualizado! ✏️");
       }
     } else {
-      const newProj = { ...payload, id: Date.now(), spId: null };
-      const spId = await spAddItem(newProj);
-      newProj.id   = spId;
-      newProj.spId = spId;
-      projects.push(newProj);
+      projects.push({ ...payload, id: Date.now() });
       toast("Projeto plotado! ✦");
     }
-    lastPollStr = JSON.stringify(projects);
+    await jbSave(projects);
     setSyncStatus("ok");
   } catch(e) {
     console.warn("save error:", e);
-    toast("Erro ao salvar no SharePoint. Verifique sua conexão.", "error");
+    toast("Erro ao salvar online. Verifique sua conexão.", "error");
     setSyncStatus("error");
   } finally {
     document.getElementById("btnSalvar").disabled = false;
@@ -1588,15 +1545,15 @@ document.getElementById("btnDeleteConfirm").onclick = async () => {
   document.getElementById("modalDelete").classList.remove("open");
   if (!p) return;
   setSyncStatus("syncing");
+  const updated = projects.filter(p => p.id !== deleteTargetId);
   try {
-    await spDeleteItem(p.spId || p.id);
-    projects = projects.filter(p => p.id !== deleteTargetId);
-    lastPollStr = JSON.stringify(projects);
+    await jbSave(updated);
+    projects = updated;
     setSyncStatus("ok");
     toast("Projeto removido.", "error");
   } catch(e) {
     console.warn("delete error:", e);
-    toast("Erro ao excluir no SharePoint.", "error");
+    toast("Erro ao excluir online.", "error");
     setSyncStatus("error");
   }
   deleteTargetId = null;
@@ -1746,15 +1703,15 @@ AREAS.forEach(a => {
 // Refresh button
 document.getElementById("btnRefresh").addEventListener("click", async () => {
   setSyncStatus("connecting");
-  const remote = await spLoad();
+  const remote = await jbLoad();
   if (Array.isArray(remote)) {
     projects    = remote;
     lastPollStr = JSON.stringify(remote);
     render();
-    toast("🔄 Dados recarregados do SharePoint", "success");
+    toast("🔄 Dados recarregados", "success");
     setSyncStatus("loaded");
   } else {
-    toast("Não foi possível conectar ao SharePoint.", "error");
+    toast("Não foi possível conectar.", "error");
     setSyncStatus("offline");
   }
 });
